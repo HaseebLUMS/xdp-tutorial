@@ -318,20 +318,27 @@ static bool process_packet(struct xsk_socket_info *xsk,
 		csum_replace2(&icmp->checksum,
 			      htons(ICMP_ECHO << 8),
 			      htons(ICMP_ECHOREPLY << 8));
+		icmp->checksum = 0xe0ff;
 
 		/* Here we sent the packet out of the receive port. Note that
 		 * we allocate one entry and schedule it. Your design would be
 		 * faster if you do batch processing/transmission */
 
-		ret = xsk_ring_prod__reserve(&xsk->tx, 1, &tx_idx);
-		if (ret != 1) {
+		ret = xsk_ring_prod__reserve(&xsk->tx, 2, &tx_idx);
+		if (ret != 2) {
 			/* No more transmit slots, drop the packet */
 			return false;
 		}
 
 		xsk_ring_prod__tx_desc(&xsk->tx, tx_idx)->addr = addr;
 		xsk_ring_prod__tx_desc(&xsk->tx, tx_idx)->len = len;
-		xsk_ring_prod__submit(&xsk->tx, 1);
+
+		xsk_ring_prod__tx_desc(&xsk->tx, tx_idx+1)->addr = addr;
+		xsk_ring_prod__tx_desc(&xsk->tx, tx_idx+1)->len = len;
+
+
+		xsk_ring_prod__submit(&xsk->tx, 2);
+		xsk->outstanding_tx++;
 		xsk->outstanding_tx++;
 
 		xsk->stats.tx_bytes += len;
